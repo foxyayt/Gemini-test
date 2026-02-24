@@ -1,325 +1,38 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gemini Pro - Corrected UI</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.2/marked.min.js"></script>
-    <style>
-        /* Ensuring the layout doesn't collapse */
-        .chat-box { height: calc(100vh - 220px); scroll-behavior: smooth; }
-        .markdown-body pre { background: #1e293b; color: #f8fafc; padding: 1rem; border-radius: 0.5rem; margin: 0.5rem 0; overflow-x: auto; }
-        .markdown-body code { background: #e2e8f0; padding: 0.1rem 0.3rem; border-radius: 0.2rem; font-family: monospace; }
-        .user-msg { background-color: #3b82f6; color: white; border-radius: 1rem 1rem 0 1rem; }
-        .ai-msg { background-color: white; border: 1px solid #e2e8f0; border-radius: 1rem 1rem 1rem 0; }
-    </style>
-</head>
-<body class="bg-slate-50 flex flex-col h-screen">
-
-    <header class="bg-white border-b px-4 py-3 shadow-sm z-10">
-        <div class="max-w-4xl mx-auto flex flex-wrap items-center justify-between gap-3">
-            <div class="flex items-center gap-2">
-                <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                <h1 class="font-bold text-slate-800 text-lg">Gemini Pro UI</h1>
-            </div>
-            <div class="flex items-center gap-2">
-                <input type="password" id="apiKey" placeholder="Paste Gemini API Key" 
-                    class="border rounded-lg px-3 py-1.5 text-sm w-48 md:w-64 focus:ring-2 focus:ring-blue-500 outline-none">
-                <select id="modelSelect" class="border rounded-lg px-2 py-1.5 text-sm bg-white outline-none">
-                    <option value="gemini-1.5-pro">1.5 Pro</option>
-                    <option value="gemini-1.5-flash">1.5 Flash</option>
-                </select>
-            </div>
-        </div>
-    </header>
-
-    <div id="chatWindow" class="chat-box max-w-4xl mx-auto w-full overflow-y-auto p-4 space-y-6">
-        <div class="ai-msg p-4 text-slate-600 text-sm">
-            Ready to chat. Please ensure your API key is valid. If you get a connection error, check your internet or key permissions at Google AI Studio.
-        </div>
-    </div>
-
-    <footer class="bg-white border-t p-4">
-        <div class="max-w-4xl mx-auto">
-            <div id="previewArea" class="flex flex-wrap gap-2 mb-2"></div>
-            
-            <div class="flex items-end gap-2 bg-slate-100 rounded-2xl p-2 border focus-within:border-blue-400 transition-colors">
-                <label class="p-2 hover:bg-slate-200 rounded-full cursor-pointer transition">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                    </svg>
-                    <input type="file" id="fileInput" class="hidden" multiple accept="image/*,application/pdf,text/*">
-                </label>
-                
-                <textarea id="userInput" rows="1" placeholder="Ask Gemini something..." 
-                    class="flex-1 bg-transparent p-2 outline-none resize-none max-h-32"></textarea>
-                
-                <button id="sendBtn" class="bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded-xl transition shadow-md">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
-                    </svg>
-                </button>
-            </div>
-        </div>
-    </footer>
-
-    <script>
-        const chatWindow = document.getElementById('chatWindow');
-        const userInput = document.getElementById('userInput');
-        const sendBtn = document.getElementById('sendBtn');
-        const apiKeyInput = document.getElementById('apiKey');
-        const fileInput = document.getElementById('fileInput');
-        const previewArea = document.getElementById('previewArea');
-        const modelSelect = document.getElementById('modelSelect');
-
-        let chatHistory = [];
-        let pendingFiles = [];
-
-        // Auto-resize textarea
-        userInput.addEventListener('input', function() {
-            this.style.height = 'auto';
-            this.style.height = (this.scrollHeight) + 'px';
-        });
-
-        // File handling
-        fileInput.addEventListener('change', async (e) => {
-            const files = Array.from(e.target.files);
-            for (const file of files) {
-                const base64Data = await toBase64(file);
-                pendingFiles.push({
-                    mime_type: file.type,
-                    data: base64Data.split(',')[1],
-                    name: file.name
-                });
-                renderFilePreview(file.name);
-            }
-        });
-
-        function renderFilePreview(name) {
-            const div = document.createElement('div');
-            div.className = "bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs flex items-center gap-2 border border-blue-200";
-            div.innerHTML = `<span>${name}</span><button class="font-bold hover:text-red-500">×</button>`;
-            div.querySelector('button').onclick = () => {
-                pendingFiles = pendingFiles.filter(f => f.name !== name);
-                div.remove();
-            };
-            previewArea.appendChild(div);
-        }
-
-        const toBase64 = file => new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = error => reject(error);
-        });
-
-        async function handleSend() {
-            const text = userInput.value.trim();
-            const key = apiKeyInput.value.trim();
-
-            if (!text && pendingFiles.length === 0) return;
-            if (!key) return alert("Please enter your API Key!");
-
-            // Add user message to UI
-            appendMessage('user', text);
-            userInput.value = '';
-            userInput.style.height = 'auto';
-
-            // Prepare parts for the API
-            const currentParts = [{ text: text }];
-            pendingFiles.forEach(f => {
-                currentParts.push({ inline_data: { mime_type: f.mime_type, data: f.data } });
-            });
-
-            chatHistory.push({ role: "user", parts: currentParts });
-            
-            // Clear files
-            pendingFiles = [];
-            previewArea.innerHTML = '';
-
-            try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelSelect.value}:generateContent?key=${key}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: chatHistory })
-                });
-
-                if (!response.ok) throw new Error(await response.text());
-
-                const data = await response.json();
-                const aiText = data.candidates[0].content.parts[0].text;
-
-                appendMessage('model', aiText);
-                chatHistory.push({ role: "model", parts: [{ text: aiText }] });
-
-            } catch (err) {
-                console.error(err);
-                appendMessage('model', `**Error:** ${err.message}. Please verify your API key and network.`);
-            }
-        }
-
-        function appendMessage(role, text) {
-            const wrapper = document.createElement('div');
-            wrapper.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'}`;
-            
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `p-4 shadow-sm max-w-[85%] ${role === 'user' ? 'user-msg' : 'ai-msg markdown-body'}`;
-            
-            if (role === 'user') {
-                msgDiv.textContent = text;
-            } else {
-                msgDiv.innerHTML = marked.parse(text);
-            }
-            
-            wrapper.appendChild(msgDiv);
-            chatWindow.appendChild(wrapper);
-            chatWindow.scrollTop = chatWindow.scrollHeight;
-        }
-
-        sendBtn.onclick = handleSend;
-        userInput.onkeydown = (e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } };
-    </script>
-</body>
-</html>
-    <footer class="p-4 bg-white border-t">
-        <div class="max-w-4xl mx-auto">
-            <div id="filePreview" class="hidden flex gap-2 mb-2 p-2 bg-gray-100 rounded"></div>
-            
-            <div class="flex gap-2 items-end">
-                <label class="cursor-pointer bg-gray-100 hover:bg-gray-200 p-3 rounded-lg transition">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                    </svg>
-                    <input type="file" id="fileInput" class="hidden" multiple>
-                </label>
-                
-                <textarea id="userInput" rows="1" placeholder="Type your message..." 
-                    class="flex-1 border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"></textarea>
-                
-                <button id="sendBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition">
-                    Send
-                </button>
-            </div>
-        </div>
-    </footer>
-
-    <script>
-        const chatWindow = document.getElementById('chatWindow');
-        const userInput = document.getElementById('userInput');
-        const sendBtn = document.getElementById('sendBtn');
-        const apiKeyInput = document.getElementById('apiKey');
-        const fileInput = document.getElementById('fileInput');
-        const filePreview = document.getElementById('filePreview');
-        const modelSelect = document.getElementById('modelSelect');
-
-        let chatHistory = [];
-        let attachedFiles = [];
-
-        // Handle File Selection
-        fileInput.addEventListener('change', async (e) => {
-            const files = Array.from(e.target.files);
-            for (const file of files) {
-                const base64 = await toBase64(file);
-                attachedFiles.push({
-                    mime_type: file.type,
-                    data: base64.split(',')[1],
-                    name: file.name
-                });
-                const chip = document.createElement('div');
-                chip.className = "bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs flex items-center gap-1";
-                chip.innerHTML = `${file.name} <span class="cursor-pointer font-bold" onclick="this.parentElement.remove()">×</span>`;
-                filePreview.appendChild(chip);
-            }
-            filePreview.classList.remove('hidden');
-        });
-
-        const toBase64 = file => new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = error => reject(error);
-        });
-
-        async function sendMessage() {
-            const text = userInput.value.trim();
-            const apiKey = apiKeyInput.value.trim();
-
-            if (!text && attachedFiles.length === 0) return;
-            if (!apiKey) {
-                alert("Please enter your API Key first!");
-                return;
-            }
-
-            // Append User Message to UI
-            appendMessage('user', text);
-            userInput.value = '';
-            
-            // Prepare Payload
-            const contents = [...chatHistory, {
-                role: "user",
-                parts: [
-                    { text: text },
-                    ...attachedFiles.map(f => ({ inline_data: { mime_type: f.mime_type, data: f.data } }))
-                ]
-            }];
-
-            // Reset file upload
-            attachedFiles = [];
-            filePreview.innerHTML = '';
-            filePreview.classList.add('hidden');
-
-            try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelSelect.value}:generateContent?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents })
-                });
-
-                const data = await response.json();
-                const aiResponse = data.candidates[0].content.parts[0].text;
-
-                appendMessage('model', aiResponse);
-                
-                // Update History
-                chatHistory.push({ role: "user", parts: [{ text }] });
-                chatHistory.push({ role: "model", parts: [{ text: aiResponse }] });
-
-            } catch (error) {
-                appendMessage('model', "Error: Could not connect to API. Check your key and connection.");
-                console.error(error);
-            }
-        }
-
-        function appendMessage(role, text) {
-            const div = document.createElement('div');
-            div.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'}`;
-            
-            const inner = document.createElement('div');
-            inner.className = `max-w-[80%] p-4 rounded-2xl ${role === 'user' ? 'bg-blue-600 text-white' : 'bg-white border shadow-sm markdown-body'}`;
-            inner.innerHTML = role === 'user' ? text : marked.parse(text);
-            
-            div.appendChild(inner);
-            chatWindow.appendChild(div);
-            chatWindow.scrollTop = chatWindow.scrollHeight;
-        }
-
-        sendBtn.addEventListener('click', sendMessage);
-        userInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
-    </script>
-</body>
-</html>
-      width:100vw;
-      display:flex;
-      min-height:0;
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Gemini Chat (Free Tier • Light • Single File)</title>
+  <style>
+    :root{
+      --bg:#f7f7f8;
+      --panel:#ffffff;
+      --panel2:#fbfbfc;
+      --text:#0f172a;
+      --muted:#667085;
+      --border:rgba(15,23,42,.12);
+      --shadow: 0 10px 28px rgba(15,23,42,.10);
+      --accent:#2563eb;
+      --accent2:#60a5fa;
+      --danger:#dc2626;
+      --radius:16px;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     }
 
-    /* Drawer overlay */
+    *{ box-sizing:border-box; }
+    html, body{ height:100%; }
+    body{
+      margin:0;
+      font-family:var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      overflow:hidden;
+    }
+
+    .app{ position:relative; height:100dvh; width:100vw; display:flex; min-height:0; }
+
     .overlay{
       position:fixed; inset:0;
       background: rgba(15,23,42,.25);
@@ -328,7 +41,6 @@
     }
     .overlay.show{ display:block; }
 
-    /* Sidebar drawer */
     .sidebar{
       position:fixed; left:0; top:0; bottom:0;
       width:380px;
@@ -354,10 +66,7 @@
       gap:12px;
       background: var(--panel2);
     }
-    .brand{
-      display:flex; align-items:center; gap:10px;
-      font-weight:900; letter-spacing:.2px;
-    }
+    .brand{ display:flex; align-items:center; gap:10px; font-weight:900; letter-spacing:.2px; }
     .dot{
       width:12px; height:12px; border-radius:999px;
       background: radial-gradient(circle at 30% 30%, var(--accent2), var(--accent));
@@ -440,12 +149,7 @@
     }
     .btn:active{ transform: translateY(1px); }
 
-    .hint{
-      margin-top:8px;
-      font-size:12.5px;
-      color: var(--muted);
-      line-height:1.35;
-    }
+    .hint{ margin-top:8px; font-size:12.5px; color: var(--muted); line-height:1.35; }
     .kbd{
       font-family: var(--mono);
       font-size: 12px;
@@ -457,15 +161,7 @@
       white-space:nowrap;
     }
 
-    /* Main chat */
-    .main{
-      flex:1;
-      height:100%;
-      min-width:0;
-      display:flex;
-      flex-direction:column;
-      min-height:0;
-    }
+    .main{ flex:1; height:100%; min-width:0; display:flex; flex-direction:column; min-height:0; }
     .topbar{
       padding:12px 12px;
       border-bottom:1px solid var(--border);
@@ -476,11 +172,8 @@
       gap:10px;
     }
     .iconbtn{
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      width:44px;
-      height:44px;
+      display:inline-flex; align-items:center; justify-content:center;
+      width:44px; height:44px;
       border-radius:14px;
       border:1px solid var(--border);
       background:#fff;
@@ -493,13 +186,7 @@
     }
     .iconbtn:active{ transform: translateY(1px); }
 
-    .topTitle{
-      display:flex;
-      flex-direction:column;
-      gap:2px;
-      min-width:0;
-      flex:1;
-    }
+    .topTitle{ display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; }
     .topTitle strong{ font-size:16px; letter-spacing:.2px; }
     .topTitle span{
       font-size:12.5px;
@@ -509,18 +196,8 @@
       text-overflow:ellipsis;
     }
 
-    .messages{
-      flex:1;
-      min-height:0;
-      overflow:auto;
-      padding:16px;
-    }
-    .msg{
-      display:flex;
-      gap:12px;
-      align-items:flex-start;
-      margin:0 0 14px;
-    }
+    .messages{ flex:1; min-height:0; overflow:auto; padding:16px; }
+    .msg{ display:flex; gap:12px; align-items:flex-start; margin:0 0 14px; }
     .avatar{
       width:38px; height:38px;
       border-radius:14px;
@@ -610,11 +287,7 @@
     }
     .filebtn input{ display:none; }
 
-    .inputRow{
-      display:flex;
-      gap:10px;
-      align-items:flex-end;
-    }
+    .inputRow{ display:flex; gap:10px; align-items:flex-end; }
     .composer textarea{
       flex:1;
       min-height:56px;
@@ -665,12 +338,12 @@
 
       <div class="sbBody">
         <div class="section">
-          <h3>Gemini API</h3>
+          <h3>Gemini API (Free tier only)</h3>
 
           <label for="apiKey">API key</label>
           <input id="apiKey" type="password" placeholder="Paste your key (stored on this device)" autocomplete="off" />
 
-          <label for="model">Model (loaded from Google)</label>
+          <label for="model">Model (auto filtered)</label>
           <select id="model">
             <option value="">Paste key → Refresh models</option>
           </select>
@@ -692,8 +365,7 @@
           </div>
 
           <div class="hint">
-            This app calls Google’s Gemini API endpoints directly from the browser:
-            <span class="kbd">GET /v1beta/models</span> and <span class="kbd">POST /v1beta/{model}:generateContent</span>.
+            Free-tier models included here are Flash / Flash-Lite (per Google pricing). 1
           </div>
         </div>
 
@@ -747,9 +419,17 @@
 
 <script>
 (() => {
-  // Google Gemini API (Generative Language API v1beta)
   const API_BASE = "https://generativelanguage.googleapis.com/v1beta";
   const UPLOAD_BASE = "https://generativelanguage.googleapis.com/upload/v1beta/files";
+
+  // Free-tier allowlist based on Google's pricing page:
+  // - gemini-2.5-flash (Free of charge)
+  // - gemini-2.5-flash-lite (Free of charge)
+  // - gemini-2.5-flash-lite-preview-09-2025 (Free of charge)
+  const FREE_MODEL_PREFIXES = [
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash" // keep after flash-lite so lite appears first if you want
+  ];
 
   let chat = [];
   let pendingFiles = [];
@@ -793,7 +473,7 @@
   }
 
   function escapeHtml(s){
-    return s.replace(/[&<>"']/g, m => ({
+    return (s || "").replace(/[&<>"']/g, m => ({
       "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
     }[m]));
   }
@@ -848,9 +528,9 @@
       div.innerHTML = `
         <div class="avatar model">G</div>
         <div class="bubble">
-          Click ☰ → paste your API key → tap “Refresh models” → pick a model → chat.
+          Click ☰ → paste your API key → “Refresh models” → select a free-tier model → chat.
           <div class="meta">
-            <span class="chip">Your error was because the model string wasn’t available for your key</span>
+            <span class="chip">This build fixes the %2F model URL bug.</span>
           </div>
         </div>`;
       messagesEl.appendChild(div);
@@ -913,938 +593,6 @@
   }
 
   async function uploadResumable(apiKey, file){
-    // Start resumable upload
-    const start = await fetch(`${UPLOAD_BASE}?key=${encodeURIComponent(apiKey)}`, {
-      method: "POST",
-      headers: {
-        "X-Goog-Upload-Protocol": "resumable",
-        "X-Goog-Upload-Command": "start",
-        "X-Goog-Upload-Header-Content-Length": String(file.size),
-        "X-Goog-Upload-Header-Content-Type": file.type || "application/octet-stream",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ file: { display_name: file.name } })
-    });
-    if (!start.ok) throw new Error(await start.text());
-
-    const uploadUrl = start.headers.get("x-goog-upload-url") || start.headers.get("X-Goog-Upload-URL");
-    if (!uploadUrl) throw new Error("No upload URL returned.");
-
-    // Upload bytes + finalize
-    const up = await fetch(uploadUrl, {
-      method: "POST",
-      headers: {
-        "X-Goog-Upload-Offset": "0",
-        "X-Goog-Upload-Command": "upload, finalize"
-      },
-      body: file
-    });
-    if (!up.ok) throw new Error(await up.text());
-
-    const info = await up.json();
-    if (!info?.file?.uri) throw new Error("Upload returned no file URI.");
-    return info.file; // { uri, mimeType, ... }
-  }
-
-  function buildBody(contents){
-    const body = { contents };
-    const sys = (systemEl.value || "").trim();
-    if (sys) body.system_instruction = { parts: [{ text: sys }] };
-    return body;
-  }
-
-  async function listModels(apiKey){
-    // Official: GET /v1beta/models?key=...
-    const res = await fetch(`${API_BASE}/models?key=${encodeURIComponent(apiKey)}`);
-    if (!res.ok) throw new Error(await res.text());
-    const data = await res.json();
-    return data.models || [];
-  }
-
-  function supportsGenerateContent(model){
-    const methods = model?.supportedGenerationMethods || [];
-    return methods.includes("generateContent");
-  }
-
-  function setModelOptions(models){
-    const usable = models
-      .filter(supportsGenerateContent)
-      .map(m => ({ name: m.name, displayName: m.displayName || m.name }));
-
-    modelEl.innerHTML = "";
-    if (!usable.length){
-      const opt = document.createElement("option");
-      opt.value = "";
-      opt.textContent = "No generateContent models available for this key";
-      modelEl.appendChild(opt);
-      return;
-    }
-
-    for (const m of usable){
-      const opt = document.createElement("option");
-      // IMPORTANT: keep full name like "models/gemini-2.5-flash"
-      opt.value = m.name;
-      opt.textContent = m.name.replace(/^models\//, "");
-      modelEl.appendChild(opt);
-    }
-
-    // restore previous selection if still valid
-    const savedModel = localStorage.getItem("g_model") || "";
-    if (savedModel && usable.some(x => x.name === savedModel)){
-      modelEl.value = savedModel;
-    } else {
-      modelEl.value = usable[0].name;
-      localStorage.setItem("g_model", modelEl.value);
-    }
-  }
-
-  async function refreshModels(){
-    const apiKey = (apiKeyEl.value || "").trim();
-    if (!apiKey){ toast("Paste your API key first."); openSidebar(); return; }
-
-    btnRefresh.disabled = true;
-    try{
-      toast("Loading models from Google…");
-      const models = await listModels(apiKey);
-      setModelOptions(models);
-      setStatus(true, "Models loaded");
-      toast("Models updated.");
-      saveSettings();
-    } catch (e){
-      setStatus(false, "Model load failed");
-      toast("Could not load models. Check key / restrictions.", 3200);
-    } finally {
-      btnRefresh.disabled = false;
-    }
-  }
-
-  async function generateFull(apiKey, modelName, body){
-    // Official endpoint format: POST /v1beta/{model=models/*}:generateContent?key=...
-    const url = `${API_BASE}/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify(body),
-      signal: abortCtrl?.signal
-    });
-    if (!res.ok) throw new Error(await res.text());
-    return await res.json();
-  }
-
-  function extractText(resp){
-    const parts = resp?.candidates?.[0]?.content?.parts || [];
-    return parts.map(p => p.text || "").join("");
-  }
-
-  async function* streamSSE(apiKey, modelName, body){
-    const url = `${API_BASE}/${encodeURIComponent(modelName)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify(body),
-      signal: abortCtrl?.signal
-    });
-    if (!res.ok) throw new Error(await res.text());
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let buf = "";
-
-    while (true){
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream:true });
-
-      let idx;
-      while ((idx = buf.indexOf("\n\n")) !== -1){
-        const block = buf.slice(0, idx);
-        buf = buf.slice(idx+2);
-
-        for (const line of block.split("\n")){
-          const t = line.trim();
-          if (!t.startsWith("data:")) continue;
-          const payload = t.slice(5).trim();
-          if (!payload) continue;
-          try { yield JSON.parse(payload); } catch {}
-        }
-      }
-    }
-  }
-
-  async function send(){
-    const apiKey = (apiKeyEl.value || "").trim();
-    if (!apiKey){ toast("Open ☰ Settings and paste your API key."); openSidebar(); return; }
-
-    const modelName = modelEl.value; // full "models/..."
-    if (!modelName){
-      toast("Tap “Refresh models” and select a model.");
-      openSidebar();
-      return;
-    }
-
-    const mode = modeEl.value;
-    const text = (promptEl.value || "").trim();
-    if (!text && pendingFiles.length === 0){ toast("Type a message or attach a file."); return; }
-
-    saveSettings();
-
-    const parts = [];
-    if (text) parts.push({ text });
-
-    if (pendingFiles.length){
-      toast("Preparing files…");
-      for (const item of pendingFiles){
-        const f = item.file;
-        const inlineOk = f.type.startsWith("image/") && f.size <= 6*1024*1024;
-
-        if (inlineOk){
-          const b64 = await fileToBase64(f);
-          parts.push({ inline_data: { mime_type: f.type || "image/png", data: b64 } });
-        } else {
-          const up = await uploadResumable(apiKey, f);
-          parts.push({ file_data: { mime_type: up.mimeType || f.type || "application/octet-stream", file_uri: up.uri } });
-        }
-      }
-    }
-
-    const userTurn = { role:"user", parts };
-    chat.push(userTurn);
-    pendingFiles = [];
-    promptEl.value = "";
-    render();
-
-    const modelTurn = { role:"model", parts:[{ text:"" }] };
-    chat.push(modelTurn);
-    render();
-
-    subtitle.textContent = `Model: ${modelName.replace(/^models\//,"")} • Mode: ${mode === "sse" ? "Streaming" : "Simple"}`;
-
-    abortCtrl = new AbortController();
-    btnSend.disabled = true;
-
-    try{
-      const contents = chat.map(t => ({ role: t.role, parts: t.parts }));
-      const body = buildBody(contents);
-
-      if (mode === "sse"){
-        let acc = "";
-        for await (const chunk of streamSSE(apiKey, modelName, body)){
-          const t = extractText(chunk);
-          if (t){
-            acc += t;
-            modelTurn.parts = [{ text: acc }];
-            render();
-          }
-        }
-        if (!modelTurn.parts?.[0]?.text){
-          modelTurn.parts = [{ text: "(No text returned.)" }];
-          render();
-        }
-      } else {
-        const resp = await generateFull(apiKey, modelName, body);
-        modelTurn.parts = [{ text: extractText(resp) || "(No text returned.)" }];
-        render();
-      }
-
-      setStatus(true, "Connected");
-    } catch (e){
-      modelTurn.parts = [{ text: "Error: " + (e?.message || String(e)) }];
-      render();
-      setStatus(false, "Error");
-      toast("Request failed. Refresh models and try another model.", 3200);
-    } finally {
-      btnSend.disabled = false;
-      abortCtrl = null;
-    }
-  }
-
-  function stop(){
-    if (abortCtrl){
-      abortCtrl.abort();
-      abortCtrl = null;
-      btnSend.disabled = false;
-      toast("Stopped.");
-    }
-  }
-
-  // Settings events
-  apiKeyEl.addEventListener("input", saveSettings);
-  modelEl.addEventListener("change", saveSettings);
-  modeEl.addEventListener("change", saveSettings);
-  systemEl.addEventListener("input", saveSettings);
-
-  btnRefresh.onclick = refreshModels;
-
-  btnTest.onclick = async () => {
-    const apiKey = (apiKeyEl.value || "").trim();
-    if (!apiKey){ toast("Paste your API key first."); return; }
-    try{
-      await listModels(apiKey);
-      setStatus(true, "Key OK");
-      toast("Key works.");
-    } catch (e){
-      setStatus(false, "Key failed");
-      toast("Key test failed. Check key restrictions / referrer settings.", 3200);
-    }
-  };
-
-  btnClearKey.onclick = () => {
-    apiKeyEl.value = "";
-    localStorage.removeItem("g_apiKey");
-    setStatus(false, "Not connected");
-    toast("Key removed from this device.");
-  };
-
-  btnExport.onclick = () => {
-    const data = {
-      exportedAt: new Date().toISOString(),
-      model: modelEl.value,
-      mode: modeEl.value,
-      system: systemEl.value || "",
-      chat
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type:"application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "gemini-chat-export.json";
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
-  btnClearChat.onclick = () => {
-    if (!confirm("Clear chat on this device?")) return;
-    chat = [];
-    localStorage.removeItem("g_chat");
-    render();
-  };
-
-  // Chat events
-  btnSend.onclick = send;
-  btnStop.onclick = stop;
-
-  promptEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey){
-      e.preventDefault();
-      send();
-    }
-  });
-
-  // Init
-  loadSettings();
-  render();
-  setStatus(false, "Not connected");
-  closeSidebar();
-
-  // If a key is already saved, auto-refresh models once on load
-  if ((apiKeyEl.value || "").trim()){
-    refreshModels();
-  }
-})();
-</script>
-</body>
-</html>      position:relative;
-      height:100dvh;
-      width:100vw;
-      display:flex;
-      min-height:0;
-    }
-
-    /* Sidebar overlay */
-    .overlay{
-      position:fixed;
-      inset:0;
-      background: rgba(15,23,42,.25);
-      display:none;
-      z-index:40;
-    }
-    .overlay.show{ display:block; }
-
-    .sidebar{
-      position:fixed;
-      left:0; top:0; bottom:0;
-      width:360px;
-      max-width: 88vw;
-      background: var(--panel);
-      border-right:1px solid var(--border);
-      box-shadow: var(--shadow);
-      z-index:50;
-
-      display:flex;
-      flex-direction:column;
-      min-height:0;
-
-      transform: translateX(-100%);
-      transition: transform .18s ease;
-    }
-    .sidebar.open{ transform: translateX(0); }
-
-    @media (min-width: 980px){
-      /* On desktop it behaves like a drawer, not permanently taking space (ChatGPT-like) */
-      .sidebar{ width: 380px; }
-    }
-
-    .sbTop{
-      padding:14px 14px 12px;
-      border-bottom:1px solid var(--border);
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      background: var(--panel2);
-    }
-    .brand{
-      display:flex; align-items:center; gap:10px;
-      font-weight:900; letter-spacing:.2px;
-    }
-    .dot{
-      width:12px; height:12px; border-radius:999px;
-      background: radial-gradient(circle at 30% 30%, #60a5fa, #2563eb);
-    }
-    .pill{
-      font-size:12px;
-      color: var(--muted);
-      border:1px solid var(--border);
-      border-radius:999px;
-      padding:6px 10px;
-      background: #fff;
-      white-space:nowrap;
-    }
-    .sbBody{
-      padding:14px;
-      overflow:auto;
-      min-height:0;
-      display:flex;
-      flex-direction:column;
-      gap:12px;
-    }
-    .section{
-      background:#fff;
-      border:1px solid var(--border);
-      border-radius:14px;
-      padding:12px;
-    }
-    .section h3{
-      margin:0 0 10px;
-      font-size:13px;
-      letter-spacing:.3px;
-      color: var(--muted);
-      text-transform:uppercase;
-      font-weight:900;
-    }
-    label{
-      display:block;
-      font-size:13px;
-      color: var(--muted);
-      margin: 10px 0 6px;
-      font-weight:700;
-    }
-    input[type="password"], select, textarea{
-      width:100%;
-      background:#fff;
-      border:1px solid var(--border);
-      color: var(--text);
-      border-radius:12px;
-      padding:12px 12px;
-      outline:none;
-      font-size:16px;
-    }
-    textarea{ min-height: 96px; resize: vertical; line-height:1.35; }
-
-    .row{ display:flex; gap:10px; align-items:center; }
-    .row > *{ flex:1; }
-
-    .btn{
-      appearance:none;
-      border:1px solid var(--border);
-      border-radius:12px;
-      padding:12px 12px;
-      font-weight:900;
-      font-size:15px;
-      cursor:pointer;
-      user-select:none;
-      touch-action: manipulation;
-      background:#fff;
-      color: var(--text);
-    }
-    .btn.primary{
-      background: var(--accent);
-      border-color: rgba(37,99,235,.35);
-      color:#fff;
-    }
-    .btn.danger{
-      background: rgba(220,38,38,.10);
-      border-color: rgba(220,38,38,.25);
-      color: #991b1b;
-    }
-    .btn:active{ transform: translateY(1px); }
-
-    .hint{
-      margin-top:8px;
-      font-size:12.5px;
-      color: var(--muted);
-      line-height:1.35;
-    }
-    .kbd{
-      font-family: var(--mono);
-      font-size: 12px;
-      padding: 2px 6px;
-      border-radius: 8px;
-      border:1px solid var(--border);
-      background: #fff;
-      color: var(--text);
-      white-space:nowrap;
-    }
-
-    /* Main chat always visible */
-    .main{
-      flex:1;
-      height:100%;
-      min-width:0;
-      display:flex;
-      flex-direction:column;
-      min-height:0;
-    }
-
-    .topbar{
-      padding:12px 12px;
-      border-bottom:1px solid var(--border);
-      background: var(--panel);
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      z-index:1;
-    }
-    .iconbtn{
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      width:44px;
-      height:44px;
-      border-radius:14px;
-      border:1px solid var(--border);
-      background:#fff;
-      cursor:pointer;
-      user-select:none;
-      touch-action: manipulation;
-      font-size:18px;
-      font-weight:900;
-      color: var(--text);
-    }
-    .iconbtn:active{ transform: translateY(1px); }
-
-    .topTitle{
-      display:flex;
-      flex-direction:column;
-      gap:2px;
-      min-width:0;
-      flex:1;
-    }
-    .topTitle strong{ font-size:16px; letter-spacing:.2px; }
-    .topTitle span{
-      font-size:12.5px;
-      color: var(--muted);
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-    }
-
-    .messages{
-      flex:1;
-      min-height:0;
-      overflow:auto;
-      padding:16px;
-    }
-
-    .msg{
-      display:flex;
-      gap:12px;
-      align-items:flex-start;
-      margin:0 0 14px;
-    }
-    .avatar{
-      width:38px; height:38px;
-      border-radius:14px;
-      border:1px solid var(--border);
-      background:#fff;
-      display:grid;
-      place-items:center;
-      font-weight:900;
-      flex:0 0 auto;
-    }
-    .avatar.user{ background: rgba(37,99,235,.08); border-color: rgba(37,99,235,.18); }
-    .avatar.model{ background: rgba(2,132,199,.08); border-color: rgba(2,132,199,.18); }
-
-    .bubble{
-      max-width: min(860px, 100%);
-      background:#fff;
-      border:1px solid var(--border);
-      border-radius:16px;
-      padding:12px 12px;
-      line-height:1.45;
-      font-size:16px;
-      white-space:pre-wrap;
-      word-break:break-word;
-    }
-    .msg.user .bubble{ background: rgba(37,99,235,.06); border-color: rgba(37,99,235,.18); }
-
-    .meta{
-      margin-top:8px;
-      padding-top:8px;
-      border-top:1px dashed rgba(15,23,42,.18);
-      color: var(--muted);
-      font-size:12.5px;
-      display:flex;
-      flex-wrap:wrap;
-      gap:8px;
-    }
-    .chip{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      padding:8px 10px;
-      border-radius:999px;
-      border:1px solid var(--border);
-      background:#fff;
-      color: var(--text);
-      font-size:13px;
-      font-weight:800;
-    }
-    .chip button{
-      border:none;
-      background:transparent;
-      cursor:pointer;
-      font-size:16px;
-      padding:0;
-      line-height:1;
-      color: var(--muted);
-    }
-
-    .composer{
-      border-top:1px solid var(--border);
-      background: var(--panel);
-      padding:12px;
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-    }
-    .attachRow{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      flex-wrap:wrap;
-    }
-    .filebtn{
-      display:inline-flex;
-      align-items:center;
-      gap:10px;
-      padding:12px 12px;
-      border-radius:12px;
-      border:1px dashed rgba(15,23,42,.22);
-      background:#fff;
-      cursor:pointer;
-      font-weight:900;
-      font-size:14px;
-      user-select:none;
-      touch-action: manipulation;
-    }
-    .filebtn input{ display:none; }
-
-    .inputRow{
-      display:flex;
-      gap:10px;
-      align-items:flex-end;
-    }
-    .composer textarea{
-      flex:1;
-      min-height:56px;
-      max-height:180px;
-      border-radius:14px;
-      padding:12px 12px;
-      font-size:16px;
-    }
-    .send{
-      width:132px;
-      min-width:132px;
-      padding:14px 12px;
-      border-radius:14px;
-      font-size:16px;
-    }
-    @media (max-width: 520px){
-      .send{ width:120px; min-width:120px; }
-    }
-
-    .toast{
-      position: fixed;
-      bottom: 18px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #fff;
-      border:1px solid var(--border);
-      border-radius: 14px;
-      padding: 12px 14px;
-      box-shadow: var(--shadow);
-      color: var(--text);
-      font-size: 14px;
-      display:none;
-      max-width: min(720px, 92vw);
-      z-index: 80;
-    }
-    .toast.show{ display:block; }
-  </style>
-</head>
-<body>
-  <div class="app">
-    <div class="overlay" id="overlay"></div>
-
-    <!-- Sidebar drawer -->
-    <aside class="sidebar" id="sidebar" aria-label="Settings sidebar">
-      <div class="sbTop">
-        <div class="brand"><span class="dot"></span><span>Settings</span></div>
-        <span class="pill" id="statusPill">Not connected</span>
-      </div>
-
-      <div class="sbBody">
-        <div class="section">
-          <h3>Gemini API</h3>
-
-          <label for="apiKey">API key</label>
-          <input id="apiKey" type="password" placeholder="Paste your key (stored on this device)" autocomplete="off" />
-
-          <label for="model">Model</label>
-          <select id="model">
-            <option value="gemini-1.5-flash">gemini-1.5-flash</option>
-            <option value="gemini-1.5-pro">gemini-1.5-pro</option>
-            <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-          </select>
-
-          <label for="mode">Response mode</label>
-          <select id="mode">
-            <option value="full">Simple (single response)</option>
-            <option value="sse">Streaming (SSE)</option>
-          </select>
-
-          <div class="row" style="margin-top:10px;">
-            <button class="btn primary" id="btnTest">Test key</button>
-            <button class="btn" id="btnClose">Close</button>
-          </div>
-
-          <div class="hint">
-            If you opened this as <span class="kbd">file://</span>, browsers often block API calls.
-            Use a local server: <span class="kbd">python -m http.server 8080</span> then open <span class="kbd">http://localhost:8080</span>
-          </div>
-        </div>
-
-        <div class="section">
-          <h3>System instruction</h3>
-          <textarea id="system" placeholder="Optional: set behavior (keep it short)."></textarea>
-        </div>
-
-        <div class="section">
-          <h3>Chat</h3>
-          <div class="row">
-            <button class="btn" id="btnExport">Export JSON</button>
-            <button class="btn danger" id="btnClear">Clear chat</button>
-          </div>
-          <div class="hint">Send: Enter • New line: Shift+Enter</div>
-        </div>
-      </div>
-    </aside>
-
-    <!-- Main chat (always visible) -->
-    <main class="main">
-      <div class="topbar">
-        <button class="iconbtn" id="btnToggle" aria-label="Open settings">☰</button>
-        <div class="topTitle">
-          <strong>Gemini Chat</strong>
-          <span id="subtitle">Light mode • Single HTML file • Attach files then send</span>
-        </div>
-        <button class="iconbtn" id="btnStop" aria-label="Stop">■</button>
-      </div>
-
-      <div class="messages" id="messages"></div>
-
-      <div class="composer">
-        <div class="attachRow">
-          <label class="filebtn" title="Attach files">
-            <input id="fileInput" type="file" multiple />
-            <span>Attach</span>
-            <span class="pill" id="fileCount">0</span>
-          </label>
-          <div id="chips" style="display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end;"></div>
-        </div>
-
-        <div class="inputRow">
-          <textarea id="prompt" placeholder="Message Gemini…"></textarea>
-          <button class="btn primary send" id="btnSend">Send</button>
-        </div>
-      </div>
-    </main>
-  </div>
-
-  <div class="toast" id="toast"></div>
-
-<script>
-(() => {
-  // Gemini REST (Generative Language API v1beta)
-  const API_BASE = "https://generativelanguage.googleapis.com/v1beta";
-  const UPLOAD_BASE = "https://generativelanguage.googleapis.com/upload/v1beta/files";
-
-  let chat = [];
-  let pendingFiles = [];
-  let abortCtrl = null;
-
-  const $ = (id) => document.getElementById(id);
-
-  const sidebar = $("sidebar");
-  const overlay = $("overlay");
-  const btnToggle = $("btnToggle");
-  const btnClose = $("btnClose");
-  const btnStop = $("btnStop");
-  const btnSend = $("btnSend");
-  const btnTest = $("btnTest");
-  const btnExport = $("btnExport");
-  const btnClear = $("btnClear");
-
-  const messagesEl = $("messages");
-  const chipsEl = $("chips");
-  const fileInput = $("fileInput");
-  const fileCount = $("fileCount");
-  const promptEl = $("prompt");
-
-  const apiKeyEl = $("apiKey");
-  const modelEl = $("model");
-  const modeEl = $("mode");
-  const systemEl = $("system");
-
-  const statusPill = $("statusPill");
-  const subtitle = $("subtitle");
-  const toastEl = $("toast");
-
-  function toast(msg, ms=2600){
-    toastEl.textContent = msg;
-    toastEl.classList.add("show");
-    clearTimeout(toastEl._t);
-    toastEl._t = setTimeout(()=>toastEl.classList.remove("show"), ms);
-  }
-
-  function escapeHtml(s){
-    return s.replace(/[&<>"']/g, m => ({
-      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
-    }[m]));
-  }
-
-  function setStatus(ok, label){
-    statusPill.textContent = label || (ok ? "Connected" : "Not connected");
-    statusPill.style.borderColor = ok ? "rgba(16,185,129,.35)" : "rgba(15,23,42,.12)";
-    statusPill.style.background  = ok ? "rgba(16,185,129,.10)" : "#fff";
-  }
-
-  function scrollBottom(){ messagesEl.scrollTop = messagesEl.scrollHeight; }
-
-  function saveSettings(){
-    localStorage.setItem("g_apiKey", apiKeyEl.value || "");
-    localStorage.setItem("g_model", modelEl.value || "");
-    localStorage.setItem("g_mode", modeEl.value || "");
-    localStorage.setItem("g_system", systemEl.value || "");
-  }
-
-  function loadSettings(){
-    apiKeyEl.value = localStorage.getItem("g_apiKey") || "";
-    const m = localStorage.getItem("g_model"); if (m) modelEl.value = m;
-    const mo = localStorage.getItem("g_mode"); if (mo) modeEl.value = mo;
-    systemEl.value = localStorage.getItem("g_system") || "";
-
-    const saved = localStorage.getItem("g_chat");
-    if (saved){
-      try { chat = JSON.parse(saved) || []; } catch { chat = []; }
-    }
-  }
-
-  function saveChat(){ localStorage.setItem("g_chat", JSON.stringify(chat)); }
-
-  function openSidebar(){
-    sidebar.classList.add("open");
-    overlay.classList.add("show");
-  }
-  function closeSidebar(){
-    sidebar.classList.remove("open");
-    overlay.classList.remove("show");
-  }
-
-  btnToggle.onclick = () => sidebar.classList.contains("open") ? closeSidebar() : openSidebar();
-  btnClose.onclick = closeSidebar;
-  overlay.onclick = closeSidebar;
-
-  function render(){
-    messagesEl.innerHTML = "";
-
-    if (chat.length === 0){
-      const div = document.createElement("div");
-      div.className = "msg model";
-      div.innerHTML = `
-        <div class="avatar model">G</div>
-        <div class="bubble">
-          Click ☰ to open Settings, paste your Gemini API key, then send a message.
-          <div class="meta">
-            <span class="chip">Tip: if file:// fails, use python -m http.server 8080</span>
-          </div>
-        </div>`;
-      messagesEl.appendChild(div);
-    } else {
-      for (const turn of chat){
-        const div = document.createElement("div");
-        div.className = "msg " + (turn.role === "user" ? "user" : "model");
-        const letter = turn.role === "user" ? "U" : "G";
-        const text = (turn.parts||[]).map(p => p.text || "").join("");
-        const files = (turn.parts||[]).filter(p => p.inline_data || p.file_data).map(p => {
-          if (p.inline_data) return `inline: ${p.inline_data.mime_type}`;
-          return `file: ${(p.file_data.mime_type||"").trim()} ${(p.file_data.file_uri||"").trim()}`.trim();
-        });
-        const meta = files.length ? `<div class="meta">${files.map(f => `<span class="chip">${escapeHtml(f)}</span>`).join("")}</div>` : "";
-        div.innerHTML = `
-          <div class="avatar ${turn.role === "user" ? "user":"model"}">${letter}</div>
-          <div class="bubble">${escapeHtml(text)}${meta}</div>`;
-        messagesEl.appendChild(div);
-      }
-    }
-
-    chipsEl.innerHTML = "";
-    for (let i=0; i<pendingFiles.length; i++){
-      const f = pendingFiles[i].file;
-      const chip = document.createElement("span");
-      chip.className = "chip";
-      chip.innerHTML = `<span>${escapeHtml(f.name)}</span><button aria-label="Remove">×</button>`;
-      chip.querySelector("button").onclick = () => { pendingFiles.splice(i,1); render(); };
-      chipsEl.appendChild(chip);
-    }
-    fileCount.textContent = String(pendingFiles.length);
-
-    saveChat();
-    requestAnimationFrame(scrollBottom);
-  }
-
-  // Files
-  fileInput.addEventListener("change", () => {
-    const files = Array.from(fileInput.files || []);
-    for (const f of files) pendingFiles.push({ file: f });
-    fileInput.value = "";
-    render();
-  });
-
-  async function fileToBase64(file){
-    const buf = await file.arrayBuffer();
-    let binary = "";
-    const bytes = new Uint8Array(buf);
-    const chunk = 0x8000;
-    for (let i=0; i<bytes.length; i+=chunk){
-      binary += String.fromCharCode(...bytes.subarray(i, i+chunk));
-    }
-    return btoa(binary);
-  }
-
-  async function uploadResumable(apiKey, file){
     const start = await fetch(`${UPLOAD_BASE}?key=${encodeURIComponent(apiKey)}`, {
       method: "POST",
       headers: {
@@ -1883,13 +631,89 @@
     return body;
   }
 
-  async function generateFull(apiKey, model, body){
-    const res = await fetch(`${API_BASE}/models/${encodeURIComponent(model)}:generateContent`, {
+  async function listModels(apiKey){
+    const res = await fetch(`${API_BASE}/models?key=${encodeURIComponent(apiKey)}`);
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    return data.models || [];
+  }
+
+  function supportsGenerateContent(model){
+    const methods = model?.supportedGenerationMethods || [];
+    return methods.includes("generateContent");
+  }
+
+  function isFreeTierModelId(modelId){
+    // Hard filter: only Flash / Flash-Lite (and Flash-Lite preview).
+    // Also exclude “pro”, “image”, “tts”, “live”, etc.
+    const id = (modelId || "").toLowerCase();
+    if (id.includes("pro")) return false;
+    if (id.includes("image")) return false;
+    if (id.includes("tts")) return false;
+    if (id.includes("live")) return false;
+
+    return FREE_MODEL_PREFIXES.some(prefix => id.startsWith(prefix));
+  }
+
+  function setModelOptions(models){
+    // Convert "models/xxx" -> "xxx"
+    const usable = models
+      .filter(supportsGenerateContent)
+      .map(m => (m.name || "").replace(/^models\//, ""))
+      .filter(Boolean)
+      .filter(isFreeTierModelId);
+
+    modelEl.innerHTML = "";
+    if (!usable.length){
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "No free-tier text models found for this key";
+      modelEl.appendChild(opt);
+      return;
+    }
+
+    // Prefer Flash-Lite first (cheapest / fastest)
+    usable.sort((a,b) => a.localeCompare(b));
+
+    for (const id of usable){
+      const opt = document.createElement("option");
+      opt.value = id;              // IMPORTANT: store ONLY the model id (no "models/")
+      opt.textContent = id;
+      modelEl.appendChild(opt);
+    }
+
+    const saved = localStorage.getItem("g_model") || "";
+    if (saved && usable.includes(saved)) modelEl.value = saved;
+    else modelEl.value = usable[0];
+    localStorage.setItem("g_model", modelEl.value);
+  }
+
+  async function refreshModels(){
+    const apiKey = (apiKeyEl.value || "").trim();
+    if (!apiKey){ toast("Paste your API key first."); openSidebar(); return; }
+
+    btnRefresh.disabled = true;
+    try{
+      toast("Loading models from Google…");
+      const models = await listModels(apiKey);
+      setModelOptions(models);
+      setStatus(true, "Models loaded");
+      toast("Models updated.");
+      saveSettings();
+    } catch (e){
+      setStatus(false, "Model load failed");
+      toast("Could not load models. Check key restrictions.", 3200);
+    } finally {
+      btnRefresh.disabled = false;
+    }
+  }
+
+  async function generateFull(apiKey, modelId, body){
+    // FIX: correct path is /v1beta/models/<id>:generateContent (no encoded slash)
+    const url = `${API_BASE}/models/${encodeURIComponent(modelId)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const res = await fetch(url, {
       method:"POST",
-      headers:{
-        "Content-Type":"application/json",
-        "x-goog-api-key": apiKey
-      },
+      headers:{ "Content-Type":"application/json" },
       body: JSON.stringify(body),
       signal: abortCtrl?.signal
     });
@@ -1902,13 +726,11 @@
     return parts.map(p => p.text || "").join("");
   }
 
-  async function* streamSSE(apiKey, model, body){
-    const res = await fetch(`${API_BASE}/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
+  async function* streamSSE(apiKey, modelId, body){
+    const url = `${API_BASE}/models/${encodeURIComponent(modelId)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`;
+    const res = await fetch(url, {
       method:"POST",
-      headers:{
-        "Content-Type":"application/json",
-        "x-goog-api-key": apiKey
-      },
+      headers:{ "Content-Type":"application/json" },
       body: JSON.stringify(body),
       signal: abortCtrl?.signal
     });
@@ -1927,6 +749,7 @@
       while ((idx = buf.indexOf("\n\n")) !== -1){
         const block = buf.slice(0, idx);
         buf = buf.slice(idx+2);
+
         for (const line of block.split("\n")){
           const t = line.trim();
           if (!t.startsWith("data:")) continue;
@@ -1940,19 +763,18 @@
 
   async function send(){
     const apiKey = (apiKeyEl.value || "").trim();
-    if (!apiKey){
-      toast("Open ☰ Settings and paste your Gemini API key.");
+    if (!apiKey){ toast("Open ☰ Settings and paste your API key."); openSidebar(); return; }
+
+    const modelId = modelEl.value; // ONLY "gemini-2.5-flash" etc
+    if (!modelId){
+      toast("Tap “Refresh models” and select a free-tier model.");
       openSidebar();
       return;
     }
 
-    const model = modelEl.value;
     const mode = modeEl.value;
     const text = (promptEl.value || "").trim();
-    if (!text && pendingFiles.length === 0){
-      toast("Type a message or attach a file.");
-      return;
-    }
+    if (!text && pendingFiles.length === 0){ toast("Type a message or attach a file."); return; }
 
     saveSettings();
 
@@ -1964,6 +786,7 @@
       for (const item of pendingFiles){
         const f = item.file;
         const inlineOk = f.type.startsWith("image/") && f.size <= 6*1024*1024;
+
         if (inlineOk){
           const b64 = await fileToBase64(f);
           parts.push({ inline_data: { mime_type: f.type || "image/png", data: b64 } });
@@ -1984,19 +807,18 @@
     chat.push(modelTurn);
     render();
 
-    subtitle.textContent = `Model: ${model} • Mode: ${mode === "sse" ? "Streaming" : "Simple"}`;
+    subtitle.textContent = `Model: ${modelId} • Mode: ${mode === "sse" ? "Streaming" : "Simple"}`;
 
     abortCtrl = new AbortController();
     btnSend.disabled = true;
 
     try{
-      // Use chat history as contents
       const contents = chat.map(t => ({ role: t.role, parts: t.parts }));
       const body = buildBody(contents);
 
       if (mode === "sse"){
         let acc = "";
-        for await (const chunk of streamSSE(apiKey, model, body)){
+        for await (const chunk of streamSSE(apiKey, modelId, body)){
           const t = extractText(chunk);
           if (t){
             acc += t;
@@ -2009,7 +831,7 @@
           render();
         }
       } else {
-        const resp = await generateFull(apiKey, model, body);
+        const resp = await generateFull(apiKey, modelId, body);
         modelTurn.parts = [{ text: extractText(resp) || "(No text returned.)" }];
         render();
       }
@@ -2019,857 +841,7 @@
       modelTurn.parts = [{ text: "Error: " + (e?.message || String(e)) }];
       render();
       setStatus(false, "Error");
-      toast("Request failed. If you opened via file://, use a local server.", 3400);
-    } finally {
-      btnSend.disabled = false;
-      abortCtrl = null;
-    }
-  }
-
-  function stop(){
-    if (abortCtrl){
-      abortCtrl.abort();
-      abortCtrl = null;
-      btnSend.disabled = false;
-      toast("Stopped.");
-    }
-  }
-
-  // Controls
-  btnSend.onclick = send;
-  btnStop.onclick = stop;
-
-  promptEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey){
-      e.preventDefault();
-      send();
-    }
-  });
-
-  apiKeyEl.addEventListener("input", saveSettings);
-  modelEl.addEventListener("change", saveSettings);
-  modeEl.addEventListener("change", saveSettings);
-  systemEl.addEventListener("input", saveSettings);
-
-  btnTest.onclick = async () => {
-    const apiKey = (apiKeyEl.value || "").trim();
-    if (!apiKey){ toast("Paste your API key first."); return; }
-    try{
-      const res = await fetch(`${API_BASE}/models`, { headers: { "x-goog-api-key": apiKey } });
-      if (!res.ok) throw new Error(await res.text());
-      setStatus(true, "Connected");
-      toast("Key works.");
-    } catch (e){
-      setStatus(false, "Not connected");
-      toast("Key test failed. If file://, use a local server.");
-    }
-  };
-
-  btnExport.onclick = () => {
-    const data = {
-      exportedAt: new Date().toISOString(),
-      model: modelEl.value,
-      mode: modeEl.value,
-      system: systemEl.value || "",
-      chat
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type:"application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "gemini-chat-export.json";
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
-  btnClear.onclick = () => {
-    if (!confirm("Clear chat on this device?")) return;
-    chat = [];
-    localStorage.removeItem("g_chat");
-    render();
-  };
-
-  // Init
-  loadSettings();
-  render();
-  setStatus(false, "Not connected");
-
-  // Start with sidebar closed so chat is always visible
-  closeSidebar();
-})();
-</script>
-</body>
-</html>    /* Layout */
-    .app{
-      position:relative;
-      height:100dvh;
-      width:100vw;
-      display:flex;
-      min-height:0;
-    }
-
-    /* Sidebar (overlay on mobile, docked on desktop) */
-    .sidebar{
-      width:360px;
-      max-width: 88vw;
-      height:100%;
-      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
-      border-right:1px solid var(--border);
-      box-shadow: var(--shadow);
-      position:relative;
-      z-index:20;
-      transform: translateX(-100%);
-      transition: transform .18s ease;
-      display:flex;
-      flex-direction:column;
-      min-height:0;
-    }
-    .sidebar.open{ transform: translateX(0); }
-
-    @media (min-width: 980px){
-      .sidebar{
-        position:relative;
-        transform: translateX(0);
-      }
-      .sidebar.closedDesktop{ transform: translateX(-100%); position:absolute; left:0; }
-    }
-
-    .overlay{
-      position:fixed;
-      inset:0;
-      background: rgba(0,0,0,.45);
-      z-index:15;
-      display:none;
-    }
-    .overlay.show{ display:block; }
-
-    .sbTop{
-      padding:14px 14px 12px;
-      border-bottom:1px solid var(--border);
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02));
-    }
-    .brand{ display:flex; align-items:center; gap:10px; font-weight:900; letter-spacing:.2px; }
-    .dot{
-      width:12px; height:12px; border-radius:999px;
-      background: radial-gradient(circle at 30% 30%, var(--accent), var(--accent2));
-      box-shadow: 0 0 0 3px rgba(76,201,240,.12), 0 0 0 6px rgba(167,139,250,.10);
-    }
-    .pill{
-      font-size:12px;
-      color:var(--muted);
-      border:1px solid var(--border);
-      border-radius:999px;
-      padding:6px 10px;
-      background: rgba(255,255,255,.03);
-      white-space:nowrap;
-    }
-    .sbBody{
-      padding:14px;
-      overflow:auto;
-      min-height:0;
-      display:flex;
-      flex-direction:column;
-      gap:12px;
-    }
-    .section{
-      background: rgba(255,255,255,.03);
-      border:1px solid var(--border);
-      border-radius: 14px;
-      padding:12px;
-    }
-    .section h3{
-      margin:0 0 10px;
-      font-size:13px;
-      letter-spacing:.3px;
-      color:var(--muted);
-      text-transform:uppercase;
-      font-weight:900;
-    }
-    label{
-      display:block;
-      font-size:13px;
-      color:var(--muted);
-      margin: 10px 0 6px;
-      font-weight:700;
-    }
-    input[type="password"], select, textarea{
-      width:100%;
-      background: rgba(10,16,30,.72);
-      border:1px solid var(--border);
-      color:var(--text);
-      border-radius: 12px;
-      padding:12px 12px;
-      outline:none;
-      font-size:16px;
-    }
-    textarea{ min-height: 96px; resize: vertical; line-height:1.35; }
-
-    .row{ display:flex; gap:10px; align-items:center; }
-    .row > *{ flex:1; }
-
-    .btn{
-      appearance:none;
-      border:1px solid var(--border);
-      border-radius:12px;
-      padding:12px 12px;
-      font-weight:900;
-      font-size:15px;
-      color:var(--text);
-      cursor:pointer;
-      user-select:none;
-      touch-action: manipulation;
-      background: rgba(255,255,255,.05);
-      transition: transform .05s ease, filter .15s ease;
-    }
-    .btn:active{ transform: translateY(1px); }
-    .btn.primary{
-      background: linear-gradient(180deg, rgba(76,201,240,.22), rgba(76,201,240,.08));
-    }
-    .btn.danger{
-      background: rgba(255,92,122,.12);
-      border-color: rgba(255,92,122,.35);
-    }
-    .hint{
-      margin-top:8px;
-      font-size:12.5px;
-      color:var(--muted);
-      line-height:1.35;
-    }
-    .kbd{
-      font-family: var(--mono);
-      font-size: 12px;
-      padding: 2px 6px;
-      border-radius: 8px;
-      border:1px solid var(--border);
-      background: rgba(255,255,255,.03);
-      color: rgba(255,255,255,.85);
-    }
-
-    /* Main chat takes full screen */
-    .main{
-      flex:1;
-      height:100%;
-      min-width:0;
-      display:flex;
-      flex-direction:column;
-      min-height:0;
-    }
-
-    .topbar{
-      padding:12px 12px;
-      border-bottom:1px solid var(--border);
-      background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02));
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-    }
-
-    .iconbtn{
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      width:44px;
-      height:44px;
-      border-radius: 14px;
-      border:1px solid var(--border);
-      background: rgba(255,255,255,.04);
-      cursor:pointer;
-      user-select:none;
-      touch-action: manipulation;
-      font-size:18px;
-      font-weight:900;
-      color:var(--text);
-    }
-    .iconbtn:active{ transform: translateY(1px); }
-    .topTitle{
-      display:flex;
-      flex-direction:column;
-      gap:2px;
-      min-width:0;
-    }
-    .topTitle strong{ font-size:16px; letter-spacing:.2px; }
-    .topTitle span{ font-size:12.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 62vw; }
-
-    .messages{
-      flex:1;
-      min-height:0;
-      overflow:auto;
-      padding:16px;
-    }
-    .msg{
-      display:flex;
-      gap:12px;
-      align-items:flex-start;
-      margin: 0 0 14px;
-    }
-    .avatar{
-      width:38px; height:38px; border-radius:14px;
-      border:1px solid var(--border);
-      background: rgba(255,255,255,.04);
-      display:grid; place-items:center;
-      font-weight:900;
-      flex:0 0 auto;
-    }
-    .avatar.user{ background: rgba(167,139,250,.10); }
-    .avatar.model{ background: rgba(76,201,240,.10); }
-
-    .bubble{
-      max-width: min(860px, 100%);
-      background: rgba(255,255,255,.04);
-      border:1px solid var(--border);
-      border-radius: 16px;
-      padding: 12px 12px;
-      line-height:1.45;
-      font-size:16px;
-      white-space:pre-wrap;
-      word-break:break-word;
-    }
-    .msg.user .bubble{ background: rgba(167,139,250,.10); }
-    .msg.model .bubble{ background: rgba(76,201,240,.08); }
-
-    .meta{
-      margin-top:8px;
-      padding-top:8px;
-      border-top:1px dashed rgba(255,255,255,.12);
-      color:var(--muted);
-      font-size:12.5px;
-      display:flex;
-      flex-wrap:wrap;
-      gap:8px;
-    }
-    .chip{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      padding:8px 10px;
-      border-radius:999px;
-      border:1px solid var(--border);
-      background: rgba(255,255,255,.03);
-      color: var(--text);
-      font-size:13px;
-      font-weight:800;
-    }
-    .chip button{
-      border:none;
-      background:transparent;
-      color: rgba(255,255,255,.75);
-      cursor:pointer;
-      font-size:16px;
-      padding:0;
-      line-height:1;
-    }
-
-    .composer{
-      border-top:1px solid var(--border);
-      background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.05));
-      padding:12px;
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-    }
-    .attachRow{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      flex-wrap:wrap;
-    }
-    .filebtn{
-      display:inline-flex;
-      align-items:center;
-      gap:10px;
-      padding:12px 12px;
-      border-radius: 12px;
-      border:1px dashed rgba(255,255,255,.22);
-      background: rgba(255,255,255,.03);
-      cursor:pointer;
-      font-weight:900;
-      font-size:14px;
-      user-select:none;
-      touch-action: manipulation;
-    }
-    .filebtn input{ display:none; }
-
-    .inputRow{
-      display:flex;
-      gap:10px;
-      align-items:flex-end;
-    }
-    .composer textarea{
-      flex:1;
-      min-height: 56px;
-      max-height: 180px;
-      border-radius: 14px;
-      padding:12px 12px;
-      font-size:16px;
-    }
-    .send{
-      width: 132px;
-      min-width: 132px;
-      padding:14px 12px;
-      border-radius: 14px;
-      font-size:16px;
-    }
-    @media (max-width: 520px){
-      .send{ width: 120px; min-width:120px; }
-    }
-
-    .toast{
-      position: fixed;
-      bottom: 18px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(15,26,48,.92);
-      border:1px solid var(--border);
-      border-radius: 14px;
-      padding: 12px 14px;
-      box-shadow: var(--shadow);
-      color: var(--text);
-      font-size: 14px;
-      display:none;
-      max-width: min(720px, 92vw);
-      z-index: 50;
-    }
-    .toast.show{ display:block; }
-  </style>
-</head>
-<body>
-  <div class="app">
-    <div class="overlay" id="overlay"></div>
-
-    <!-- Sidebar -->
-    <aside class="sidebar" id="sidebar" aria-label="Settings sidebar">
-      <div class="sbTop">
-        <div class="brand"><span class="dot"></span><span>Settings</span></div>
-        <span class="pill" id="statusPill">Not connected</span>
-      </div>
-
-      <div class="sbBody">
-        <div class="section">
-          <h3>Gemini API</h3>
-
-          <label for="apiKey">API key</label>
-          <input id="apiKey" type="password" placeholder="Paste your key (stored on this device)" autocomplete="off" />
-
-          <label for="model">Model</label>
-          <select id="model">
-            <option value="gemini-1.5-flash">gemini-1.5-flash</option>
-            <option value="gemini-1.5-pro">gemini-1.5-pro</option>
-            <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-          </select>
-
-          <label for="mode">Response mode</label>
-          <select id="mode">
-            <option value="full">Simple (single response)</option>
-            <option value="sse">Streaming (SSE)</option>
-          </select>
-
-          <div class="row" style="margin-top:10px;">
-            <button class="btn primary" id="btnTest">Test key</button>
-            <button class="btn" id="btnClose">Close</button>
-          </div>
-
-          <div class="hint">
-            If “Test key” fails, your browser may be blocking the request (CORS / mixed content) or the key/model is wrong.
-            Best reliability: run from a local server (instructions in the chat header).
-          </div>
-        </div>
-
-        <div class="section">
-          <h3>System instruction</h3>
-          <textarea id="system" placeholder="Optional: set behavior (short and strict works best)."></textarea>
-          <div class="hint">
-            Stored locally on this device. Use this for tone, formatting, or boundaries.
-          </div>
-        </div>
-
-        <div class="section">
-          <h3>Chat</h3>
-          <div class="row">
-            <button class="btn" id="btnExport">Export JSON</button>
-            <button class="btn danger" id="btnClear">Clear chat</button>
-          </div>
-          <div class="hint">Enter to send • Shift+Enter for new line</div>
-        </div>
-      </div>
-    </aside>
-
-    <!-- Main chat -->
-    <main class="main">
-      <div class="topbar">
-        <button class="iconbtn" id="btnToggle" aria-label="Open settings">☰</button>
-        <div class="topTitle">
-          <strong>Gemini Chat</strong>
-          <span id="subtitle">If it doesn’t connect: open from a local server (not file://). Try: <span class="kbd">python -m http.server 8080</span></span>
-        </div>
-        <button class="iconbtn" id="btnStop" aria-label="Stop">■</button>
-      </div>
-
-      <div class="messages" id="messages"></div>
-
-      <div class="composer">
-        <div class="attachRow">
-          <label class="filebtn" title="Attach files">
-            <input id="fileInput" type="file" multiple />
-            <span>Attach</span>
-            <span class="pill" id="fileCount">0</span>
-          </label>
-          <div id="chips" style="display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end;"></div>
-        </div>
-
-        <div class="inputRow">
-          <textarea id="prompt" placeholder="Message Gemini…"></textarea>
-          <button class="btn primary send" id="btnSend">Send</button>
-        </div>
-      </div>
-    </main>
-  </div>
-
-  <div class="toast" id="toast"></div>
-
-<script>
-(() => {
-  // Very simple Gemini REST client (Generative Language API v1beta)
-  const API_BASE = "https://generativelanguage.googleapis.com/v1beta";
-  const UPLOAD_BASE = "https://generativelanguage.googleapis.com/upload/v1beta/files";
-
-  // State
-  let chat = [];              // [{role:"user"|"model", parts:[{text}|{inline_data}|{file_data}]}]
-  let pendingFiles = [];      // [{file: File}]
-  let abortCtrl = null;
-
-  // Elements
-  const $ = (id) => document.getElementById(id);
-  const sidebar = $("sidebar");
-  const overlay = $("overlay");
-  const btnToggle = $("btnToggle");
-  const btnClose = $("btnClose");
-  const btnStop = $("btnStop");
-  const btnSend = $("btnSend");
-  const btnTest = $("btnTest");
-  const btnExport = $("btnExport");
-  const btnClear = $("btnClear");
-  const messagesEl = $("messages");
-  const chipsEl = $("chips");
-  const fileInput = $("fileInput");
-  const fileCount = $("fileCount");
-  const promptEl = $("prompt");
-
-  const apiKeyEl = $("apiKey");
-  const modelEl = $("model");
-  const modeEl = $("mode");
-  const systemEl = $("system");
-
-  const statusPill = $("statusPill");
-  const subtitle = $("subtitle");
-  const toastEl = $("toast");
-
-  // Helpers
-  function toast(msg, ms=2600){
-    toastEl.textContent = msg;
-    toastEl.classList.add("show");
-    clearTimeout(toastEl._t);
-    toastEl._t = setTimeout(()=>toastEl.classList.remove("show"), ms);
-  }
-
-  function escapeHtml(s){
-    return s.replace(/[&<>"']/g, m => ({
-      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
-    }[m]));
-  }
-
-  function setStatus(ok, label){
-    statusPill.textContent = label || (ok ? "Connected" : "Not connected");
-    statusPill.style.borderColor = ok ? "rgba(61,220,151,.35)" : "rgba(255,255,255,.12)";
-    statusPill.style.background  = ok ? "rgba(61,220,151,.08)" : "rgba(255,255,255,.03)";
-  }
-
-  function scrollBottom(){ messagesEl.scrollTop = messagesEl.scrollHeight; }
-
-  function saveSettings(){
-    localStorage.setItem("g_apiKey", apiKeyEl.value || "");
-    localStorage.setItem("g_model", modelEl.value || "");
-    localStorage.setItem("g_mode", modeEl.value || "");
-    localStorage.setItem("g_system", systemEl.value || "");
-  }
-
-  function loadSettings(){
-    apiKeyEl.value = localStorage.getItem("g_apiKey") || "";
-    const m = localStorage.getItem("g_model"); if (m) modelEl.value = m;
-    const mo = localStorage.getItem("g_mode"); if (mo) modeEl.value = mo;
-    systemEl.value = localStorage.getItem("g_system") || "";
-
-    const saved = localStorage.getItem("g_chat");
-    if (saved){
-      try { chat = JSON.parse(saved) || []; } catch { chat = []; }
-    }
-  }
-
-  function saveChat(){ localStorage.setItem("g_chat", JSON.stringify(chat)); }
-
-  function render(){
-    messagesEl.innerHTML = "";
-
-    if (chat.length === 0){
-      const div = document.createElement("div");
-      div.className = "msg model";
-      div.innerHTML = `
-        <div class="avatar model">G</div>
-        <div class="bubble">
-          Open settings (☰), paste your Gemini API key, choose a model, then send a message.
-          <div class="meta">
-            <span class="chip">Attach files before sending</span>
-            <span class="chip">If it fails on file:// use a local server</span>
-          </div>
-        </div>`;
-      messagesEl.appendChild(div);
-    } else {
-      for (const turn of chat){
-        const div = document.createElement("div");
-        div.className = "msg " + (turn.role === "user" ? "user" : "model");
-        const letter = turn.role === "user" ? "U" : "G";
-        const text = (turn.parts||[]).map(p => p.text || "").join("");
-        const files = (turn.parts||[]).filter(p => p.inline_data || p.file_data).map(p => {
-          if (p.inline_data) return `inline: ${p.inline_data.mime_type}`;
-          return `file: ${p.file_data.mime_type || ""} ${p.file_data.file_uri || ""}`.trim();
-        });
-
-        const meta = files.length ? `<div class="meta">${files.map(f => `<span class="chip">${escapeHtml(f)}</span>`).join("")}</div>` : "";
-        div.innerHTML = `
-          <div class="avatar ${turn.role === "user" ? "user":"model"}">${letter}</div>
-          <div class="bubble">${escapeHtml(text)}${meta}</div>`;
-        messagesEl.appendChild(div);
-      }
-    }
-
-    // file chips
-    chipsEl.innerHTML = "";
-    for (let i=0; i<pendingFiles.length; i++){
-      const f = pendingFiles[i].file;
-      const chip = document.createElement("span");
-      chip.className = "chip";
-      chip.innerHTML = `<span>${escapeHtml(f.name)}</span><button aria-label="Remove">×</button>`;
-      chip.querySelector("button").onclick = () => { pendingFiles.splice(i,1); render(); };
-      chipsEl.appendChild(chip);
-    }
-    fileCount.textContent = String(pendingFiles.length);
-
-    saveChat();
-    requestAnimationFrame(scrollBottom);
-  }
-
-  // Sidebar controls
-  function openSidebar(){
-    sidebar.classList.add("open");
-    overlay.classList.add("show");
-  }
-  function closeSidebar(){
-    sidebar.classList.remove("open");
-    overlay.classList.remove("show");
-  }
-
-  btnToggle.onclick = () => {
-    // Desktop: treat as overlay too (simple)
-    if (sidebar.classList.contains("open")) closeSidebar();
-    else openSidebar();
-  };
-  btnClose.onclick = closeSidebar;
-  overlay.onclick = closeSidebar;
-
-  // File to base64 (for small images)
-  async function fileToBase64(file){
-    const buf = await file.arrayBuffer();
-    let binary = "";
-    const bytes = new Uint8Array(buf);
-    const chunk = 0x8000;
-    for (let i=0; i<bytes.length; i+=chunk){
-      binary += String.fromCharCode(...bytes.subarray(i, i+chunk));
-    }
-    return btoa(binary);
-  }
-
-  async function uploadResumable(apiKey, file){
-    // Start resumable upload
-    const start = await fetch(`${UPLOAD_BASE}?key=${encodeURIComponent(apiKey)}`, {
-      method: "POST",
-      headers: {
-        "X-Goog-Upload-Protocol": "resumable",
-        "X-Goog-Upload-Command": "start",
-        "X-Goog-Upload-Header-Content-Length": String(file.size),
-        "X-Goog-Upload-Header-Content-Type": file.type || "application/octet-stream",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ file: { display_name: file.name } })
-    });
-    if (!start.ok) throw new Error(await start.text());
-    const uploadUrl = start.headers.get("x-goog-upload-url") || start.headers.get("X-Goog-Upload-URL");
-    if (!uploadUrl) throw new Error("No upload URL returned.");
-
-    // Upload bytes + finalize
-    const up = await fetch(uploadUrl, {
-      method: "POST",
-      headers: {
-        "X-Goog-Upload-Offset": "0",
-        "X-Goog-Upload-Command": "upload, finalize"
-      },
-      body: file
-    });
-    if (!up.ok) throw new Error(await up.text());
-    const info = await up.json();
-    if (!info?.file?.uri) throw new Error("Upload returned no file URI.");
-    return info.file; // { uri, mimeType, ... }
-  }
-
-  function buildBody(contents){
-    const body = { contents };
-    const sys = (systemEl.value || "").trim();
-    if (sys) body.system_instruction = { parts: [{ text: sys }] };
-    return body;
-  }
-
-  async function generateFull(apiKey, model, body){
-    const res = await fetch(`${API_BASE}/models/${encodeURIComponent(model)}:generateContent`, {
-      method:"POST",
-      headers:{
-        "Content-Type":"application/json",
-        "x-goog-api-key": apiKey
-      },
-      body: JSON.stringify(body),
-      signal: abortCtrl?.signal
-    });
-    if (!res.ok) throw new Error(await res.text());
-    return await res.json();
-  }
-
-  function extractText(resp){
-    const parts = resp?.candidates?.[0]?.content?.parts || [];
-    return parts.map(p => p.text || "").join("");
-  }
-
-  async function* streamSSE(apiKey, model, body){
-    const res = await fetch(`${API_BASE}/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
-      method:"POST",
-      headers:{
-        "Content-Type":"application/json",
-        "x-goog-api-key": apiKey
-      },
-      body: JSON.stringify(body),
-      signal: abortCtrl?.signal
-    });
-    if (!res.ok) throw new Error(await res.text());
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let buf = "";
-
-    while (true){
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream:true });
-
-      let idx;
-      while ((idx = buf.indexOf("\n\n")) !== -1){
-        const block = buf.slice(0, idx);
-        buf = buf.slice(idx+2);
-        for (const line of block.split("\n")){
-          const t = line.trim();
-          if (!t.startsWith("data:")) continue;
-          const payload = t.slice(5).trim();
-          if (!payload) continue;
-          try { yield JSON.parse(payload); } catch {}
-        }
-      }
-    }
-  }
-
-  async function send(){
-    const apiKey = (apiKeyEl.value || "").trim();
-    if (!apiKey){ toast("Open settings and paste your Gemini API key."); openSidebar(); return; }
-
-    const model = modelEl.value;
-    const mode = modeEl.value;
-    const text = (promptEl.value || "").trim();
-    if (!text && pendingFiles.length === 0){ toast("Type a message or attach a file."); return; }
-
-    saveSettings();
-
-    // Create user parts
-    const parts = [];
-    if (text) parts.push({ text });
-
-    // Attachments:
-    // - Small images: inline_data
-    // - Everything else: resumable upload -> file_data
-    if (pendingFiles.length){
-      toast("Preparing files…");
-      for (const item of pendingFiles){
-        const f = item.file;
-        const inlineOk = f.type.startsWith("image/") && f.size <= 6*1024*1024;
-        if (inlineOk){
-          const b64 = await fileToBase64(f);
-          parts.push({ inline_data: { mime_type: f.type || "image/png", data: b64 } });
-        } else {
-          const up = await uploadResumable(apiKey, f);
-          parts.push({ file_data: { mime_type: up.mimeType || f.type || "application/octet-stream", file_uri: up.uri } });
-        }
-      }
-    }
-
-    // Push user turn + model placeholder
-    const userTurn = { role:"user", parts };
-    chat.push(userTurn);
-    pendingFiles = [];
-    promptEl.value = "";
-    render();
-
-    const modelTurn = { role:"model", parts:[{ text:"" }] };
-    chat.push(modelTurn);
-    render();
-
-    subtitle.innerHTML = `Model: <span class="kbd">${escapeHtml(model)}</span> • Mode: <span class="kbd">${mode === "sse" ? "stream" : "simple"}</span>`;
-
-    abortCtrl = new AbortController();
-    btnSend.disabled = true;
-
-    try{
-      // Contents should include history (user/model turns), plus the latest user turn is already included in chat
-      const contents = chat
-        .filter(t => t.role === "user" || t.role === "model")
-        .map(t => ({ role: t.role, parts: t.parts }));
-
-      const body = buildBody(contents);
-
-      if (mode === "sse"){
-        let acc = "";
-        for await (const chunk of streamSSE(apiKey, model, body)){
-          const t = extractText(chunk);
-          if (t){
-            acc += t;
-            modelTurn.parts = [{ text: acc }];
-            render();
-          }
-        }
-        if (!modelTurn.parts?.[0]?.text){
-          modelTurn.parts = [{ text: "(No text returned.)" }];
-          render();
-        }
-      } else {
-        const resp = await generateFull(apiKey, model, body);
-        const out = extractText(resp) || "(No text returned.)";
-        modelTurn.parts = [{ text: out }];
-        render();
-      }
-
-      setStatus(true, "Connected");
-    } catch (e){
-      modelTurn.parts = [{ text: "Error: " + (e?.message || String(e)) }];
-      render();
-      setStatus(false, "Error");
-      toast("Request failed. If you opened this as file://, use a local server.", 3400);
+      toast("Request failed. Try Refresh models, then pick Flash-Lite.", 3200);
     } finally {
       btnSend.disabled = false;
       abortCtrl = null;
@@ -2886,13 +858,7 @@
   }
 
   // Events
-  fileInput.addEventListener("change", () => {
-    const files = Array.from(fileInput.files || []);
-    for (const f of files) pendingFiles.push({ file: f });
-    fileInput.value = "";
-    render();
-  });
-
+  btnRefresh.onclick = refreshModels;
   btnSend.onclick = send;
   btnStop.onclick = stop;
 
@@ -2912,15 +878,20 @@
     const apiKey = (apiKeyEl.value || "").trim();
     if (!apiKey){ toast("Paste your API key first."); return; }
     try{
-      // quick test: list models
-      const res = await fetch(`${API_BASE}/models`, { headers: { "x-goog-api-key": apiKey } });
-      if (!res.ok) throw new Error(await res.text());
-      setStatus(true, "Connected");
+      await listModels(apiKey);
+      setStatus(true, "Key OK");
       toast("Key works.");
     } catch (e){
-      setStatus(false, "Not connected");
-      toast("Key test failed. Use a local server if on file://.");
+      setStatus(false, "Key failed");
+      toast("Key test failed. Check restrictions in AI Studio.", 3200);
     }
+  };
+
+  btnClearKey.onclick = () => {
+    apiKeyEl.value = "";
+    localStorage.removeItem("g_apiKey");
+    setStatus(false, "Not connected");
+    toast("Key removed from this device.");
   };
 
   btnExport.onclick = () => {
@@ -2939,10 +910,10 @@
     URL.revokeObjectURL(a.href);
   };
 
-  btnClear.onclick = () => {
+  btnClearChat.onclick = () => {
     if (!confirm("Clear chat on this device?")) return;
     chat = [];
-    saveChat();
+    localStorage.removeItem("g_chat");
     render();
   };
 
@@ -2950,10 +921,10 @@
   loadSettings();
   render();
   setStatus(false, "Not connected");
+  closeSidebar();
 
-  // Helpful: if desktop width, start with sidebar closed (ChatGPT feel)
-  if (window.matchMedia("(min-width: 980px)").matches){
-    closeSidebar();
+  if ((apiKeyEl.value || "").trim()){
+    refreshModels();
   }
 })();
 </script>
